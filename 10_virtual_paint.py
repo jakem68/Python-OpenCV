@@ -20,7 +20,8 @@ orange = [0,165,255]
 
 # [h_min, s_min, v_min, h_max, s_max, v_max]
 no_mask_hsv = [0, 0, 0, 255, 255, 255]
-orange_mask_hsv = [0, 131, 190, 60, 255, 255]
+# orange_mask_hsv = [0, 131, 190, 60, 255, 255]
+orange_mask_hsv = [0, 83, 203, 221, 255, 255]
 blue_mask_hsv = [87, 109, 101, 159, 255, 255]
 
 myColorMasks = [orange_mask_hsv, blue_mask_hsv]
@@ -36,8 +37,6 @@ def findColor(img, myColorMasks):
         lower = np.array(color[0:3])
         upper = np.array(color[3:6])
         mask = cv2.inRange(imgHSV, lower, upper)
-        # imgResult = cv2.bitwise_and(img, img, mask=mask)
-        # cv2.imshow(str(color),mask)
         hsv_masks.append(mask)
     return hsv_masks
 
@@ -45,16 +44,25 @@ def showContours(masks):
     stift_tips = []
     for mask in masks:
         contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        for cnt in contours:
-            stift_tip = (0,0)
-            area = cv2.contourArea(cnt)
-            if area > 500 :
-                cv2.drawContours(imgResult, cnt, -1, (0,255,0), 3)
-                perim = cv2.arcLength(cnt, True)
-                approx = cv2.approxPolyDP(cnt, perim * 0.02, True)  
+        # find contour with largest area
+        if contours:
+            areas = []
+            for cnt in contours:
+                stift_tip = (0,0)
+                area = cv2.contourArea(cnt)
+                areas.append(area)
+            max_area = max(areas)
+            max_index = areas.index(max_area)
+            if max_area > 500 :
+                cv2.drawContours(imgResult, contours[max_index], -1, (0,255,0), 3)
+                perim = cv2.arcLength(contours[max_index], True)
+                approx = cv2.approxPolyDP(contours[max_index], perim * 0.02, True)  
                 x, y, w, h = cv2.boundingRect(approx)
                 stift_tip = (x+w//2, y)
                 stift_tips.append(stift_tip)
+            # need a stift_tip for every mask
+            else:
+                stift_tips.append((0,0))
     return stift_tips
             
 while True:
@@ -63,9 +71,10 @@ while True:
 
     hsv_masks = findColor(img, myColorMasks)
     stift_tips = showContours(hsv_masks)
+    print(stift_tips)
     for idx, stift_tip in enumerate(stift_tips):
-        cv2.circle(imgResult, (stift_tip[0], stift_tip[1]), 10, myColors[idx], cv2.FILLED)
-
+        if stift_tip != (0,0):
+            cv2.circle(imgResult, (stift_tip[0], stift_tip[1]), 10, myColors[idx], cv2.FILLED)
 
     cv2.imshow('Result', imgResult)
     if cv2.waitKey(1) & 0xFF == ord('q'):

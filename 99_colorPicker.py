@@ -3,6 +3,15 @@
 import cv2 as cv2
 import numpy as np
 
+no_hsv_mask = [0,0,0,255,255,255]
+orange_hsv_mask = [0, 83, 203, 221, 255, 255]
+blue_hsv_mask = [87, 109, 101, 159, 255, 255]
+
+color_mask = orange_hsv_mask
+
+imgFile = "/home/jan/programming/python/opencv2/lambo.png"
+
+
 def empty(a):
     pass
 
@@ -47,12 +56,7 @@ def create_trackbars(color):
     cv2.createTrackbar("Val Min", "TrackBars", color[2], 255, empty)
     cv2.createTrackbar("Val Max", "TrackBars", color[5], 255, empty)
     
-no_hsv_mask = [0,0,0,255,255,255]
-orange_hsv_mask = [0, 131, 190, 60, 255, 255]
-blue_hsv_mask = [87, 109, 101, 159, 255, 255]
-create_trackbars(blue_hsv_mask)
-
-imgFile = "/home/jan/programming/python/opencv2/lambo.png"
+create_trackbars(color_mask)
 cap = cv2.VideoCapture(0)
 
 while True:
