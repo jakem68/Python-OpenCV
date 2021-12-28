@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 cap = cv2.VideoCapture(0)
 print("width camera is: {0}".format(cap.get(cv2.CAP_PROP_FRAME_WIDTH)))
@@ -21,12 +22,13 @@ orange = [0,165,255]
 # [h_min, s_min, v_min, h_max, s_max, v_max]
 no_mask_hsv = [0, 0, 0, 255, 255, 255]
 # orange_mask_hsv = [0, 131, 190, 60, 255, 255]
-orange_mask_hsv = [0, 83, 203, 221, 255, 255]
+orange_mask_hsv = [0, 83, 203, 20, 255, 255]
 blue_mask_hsv = [87, 109, 101, 159, 255, 255]
 
 myColorMasks = [orange_mask_hsv, blue_mask_hsv]
 myColors = [orange, blue]
 
+myPoints = [] # [x, y, colorID]
 
 print('opencv version {0}'.format(cv2.__version__))
 
@@ -64,17 +66,34 @@ def showContours(masks):
             else:
                 stift_tips.append((0,0))
     return stift_tips
+
+def draw_on_canvas(myPoints, myColors):
+    for point in myPoints:
+        cv2.circle(imgResult, (point[0], point[1]), 10, point[2], cv2.FILLED)
             
+def waiting_time_passed(start_time, start_delay):
+    time_passed = False
+    if time.time() - start_time > start_delay:
+        time_passed = True
+    return time_passed
+
+start_time = time.time()
+start_delay = 3 #sec
 while True:
     succes, img = cap.read()
     imgResult = img.copy()
 
-    hsv_masks = findColor(img, myColorMasks)
-    stift_tips = showContours(hsv_masks)
-    print(stift_tips)
-    for idx, stift_tip in enumerate(stift_tips):
-        if stift_tip != (0,0):
-            cv2.circle(imgResult, (stift_tip[0], stift_tip[1]), 10, myColors[idx], cv2.FILLED)
+    if waiting_time_passed(start_time, start_delay):
+        hsv_masks = findColor(img, myColorMasks)
+        stift_tips = showContours(hsv_masks)
+        # print(stift_tips)
+        for idx, stift_tip in enumerate(stift_tips):
+            if stift_tip != (0,0):
+                cv2.circle(imgResult, (stift_tip[0], stift_tip[1]), 10, myColors[idx], cv2.FILLED)
+                myPoints.append([stift_tip[0], stift_tip[1], myColors[idx]])
+        
+        draw_on_canvas(myPoints, myColors)
+    
 
     cv2.imshow('Result', imgResult)
     if cv2.waitKey(1) & 0xFF == ord('q'):

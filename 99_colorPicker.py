@@ -4,7 +4,7 @@ import cv2 as cv2
 import numpy as np
 
 no_hsv_mask = [0,0,0,255,255,255]
-orange_hsv_mask = [0, 83, 203, 221, 255, 255]
+orange_hsv_mask = [0, 83, 203, 16, 255, 255]
 blue_hsv_mask = [87, 109, 101, 159, 255, 255]
 
 color_mask = orange_hsv_mask
