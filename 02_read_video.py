@@ -10,8 +10,6 @@ print("height camera is: {0}".format(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
 # cap.set(3, 320)
 # cap.set(4, 240)
 
-q
-
 print('opencv version {0}'.format(cv2.__version__))
 
 
