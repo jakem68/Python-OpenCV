@@ -7,7 +7,7 @@ print('opencv version {0}'.format(cv.__version__))
 
 kernel = np.ones((5,5), np.uint8)
 
-imgFile = "/home/jan/programming/python/opencv/Lenna.png"
+imgFile = "Lenna.png"
 img = cv.imread(imgFile)
 imgGray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
 imgBlur = cv.GaussianBlur(imgGray, (7,7), 0)

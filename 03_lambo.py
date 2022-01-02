@@ -3,7 +3,7 @@
 import cv2 as cv
 import numpy as np
 
-imgFile = "/home/jan/programming/python/opencv/lambo.png"
+imgFile = "lambo.png"
 img = cv.imread(imgFile)
 print(img.shape)
 imgResize = cv.resize(img, (300, 200))

@@ -9,7 +9,7 @@ green_bgr = (0,255,00)
 yellow_bgr = (0,255,255)
 cyan_bgr = (255,255,0)
 magenta_bgr = (255,0,255)
-img_path = "/home/jan/programming/python/opencv/scan_example (2).jpg"
+img_path = "scan_example (2).jpg"
 zoom = 0.3
 ###############################################
 

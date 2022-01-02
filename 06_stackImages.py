@@ -74,7 +74,7 @@ def stackImages(scale, imgs, cols):
         ver = hor
     return ver
     
-imgFile = "/home/jan/programming/python/opencv/Lenna.png"
+imgFile = "Lenna.png"
 img = cv2.imread(imgFile)
 
 imgHor = np.hstack((img, img))

@@ -70,7 +70,7 @@ def getContours(imagOrig, imgCanny):
 
 
 
-imgFile = "/home/jan/programming/python/opencv/shapes.png"
+imgFile = "shapes.png"
 imgOrig = cv.imread(imgFile)
 imgGray = cv.cvtColor(imgOrig, cv.COLOR_BGR2GRAY)
 imgBlur = cv.GaussianBlur(imgGray, (7,7), 1)

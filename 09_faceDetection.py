@@ -16,7 +16,7 @@ green = (0,255,00)
 
 faceCascade = cv2.CascadeClassifier(haar_model)
 # imgFile = "/home/jan/programming/python/opencv/Lenna.png"
-imgFile = "/home/jan/programming/python/opencv/people.jpg"
+imgFile = "people.jpg"
 img = cv2.imread(imgFile)
 
 #rotation angle in degree

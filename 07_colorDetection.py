@@ -47,7 +47,7 @@ cv.createTrackbar("Sat Max", "TrackBars", 255, 255, empty)
 cv.createTrackbar("Val Min", "TrackBars", 102, 255, empty)
 cv.createTrackbar("Val Max", "TrackBars", 255, 255, empty)
     
-imgFile = "/home/jan/programming/python/opencv/lambo.png"
+imgFile = "lambo.png"
 
 while True:
     img = cv.imread(imgFile)

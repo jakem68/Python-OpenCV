@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 
-imgPath = "/home/jan/programming/python/opencv/cards.jpg"
+imgPath = "cards.jpg"
 
 img = cv.imread(imgPath)
 
