@@ -16,15 +16,11 @@ zoom = 0.3
 print('opencv version {0}'.format(cv2.__version__))
 
 img = cv2.imread(img_path)
-print(img.shape)
 hImg, wImg, _ = img.shape
 img_ratio = wImg/hImg
 
 hImg = int(hImg * zoom)
 wImg = int(wImg * zoom)
-
-
-# hImg, wImg = 480, 640
 
 def stack_images(scale, imgList, cols):
     rows = math.ceil(len(imgList) / cols)
@@ -69,7 +65,7 @@ def pre_processing(img):
     img_blur = cv2.GaussianBlur(img, (5,5), 1)
     img_canny = cv2.Canny(img_blur, 100, 100)
     kernel = np.ones((10,10))
-    img_dilated = cv2.dilate(img_canny, kernel, iterations = 2)
+    img_dilated = cv2.dilate(img_canny, kernel, iterations = 1)
     img_threshold = cv2.erode(img_dilated, kernel, iterations = 1)
     processing_imgs.extend([img, img_gray, img_blur, img_canny, img_dilated, img_threshold])
     return processing_imgs
@@ -141,6 +137,16 @@ def get_warp(img, contour):
     # img_cropped = cv2.resize(img_cropped, (warp_width, warp_height))
     return img_cropped
 
+def detect_lines(imgs):
+    linesP = cv2.HoughLinesP(imgs[5], 1, np.pi / 360, 100, None, 300, 30)
+    print(len(linesP))
+    print(linesP.shape)
+    if linesP is not None:
+        for i in range(0, len(linesP)):
+            l = linesP[i][0]
+            cv2.line(imgs[0], (l[0], l[1]), (l[2], l[3]), red_bgr, 3, cv2.LINE_AA)
+    return imgs
+
 img = cv2.resize(img, (wImg, hImg))
 # returns all steps in pre-processing: gray, blur, dilatated, eroded, ...
 processing_imgs = pre_processing(img)
@@ -156,11 +162,10 @@ if len(contour) != 0 :
 else:
     processing_imgs.append(img)
 
+processing_imgs = detect_lines(processing_imgs)
 
 stacked_img = stack_images(0.5, processing_imgs, 5)
 cv2.imshow('Stack', stacked_img)
-if len(contour) != 0 :
-    cv2.imshow('Warped', warped_img)
+# if len(contour) != 0 :
+#     cv2.imshow('Warped', warped_img)
 cv2.waitKey(0)
-
-

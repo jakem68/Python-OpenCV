@@ -1,3 +1,4 @@
+import numpy as np
 import cv2
 import pytesseract
 
@@ -63,5 +64,12 @@ for idx, word in enumerate(output.splitlines()):
             cv2.rectangle(img, (x0, y0), (x0+x1, y0+y1), green_bgr, 1)
             cv2.putText(img, data_box[11], (x0, y0-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
 
+# img_copy = np.copy(img)
+img_copy = 0
+img =  -img
+print(img_copy)
+
+
 cv2.imshow('Result', img)
+cv2.imshow('Result2', img_copy)
 cv2.waitKey(0)
