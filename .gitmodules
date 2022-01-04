@@ -1,0 +1,3 @@
+[submodule "read_from_table"]
+	path = read_from_table
+	url = https://github.com/fazlurnu/Text-Extraction-Table-Image.git
