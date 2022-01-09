@@ -37,22 +37,8 @@ print(output)
 # cv2.imshow('Result', img)
 # cv2.waitKey(0)
 
-# ### detecting words
-# output = pytesseract.image_to_data(img)
-# hImg, wImg, _ = img.shape
-# # hImg, wImg = img.shape
-# for idx, word in enumerate(output.splitlines()):
-#     if idx != 0:
-#         data_box = word.split()
-#         print(data_box)
-#         if len(data_box) == 12:
-#             x0, y0, x1, y1 = int(data_box[6]), int(data_box[7]), int(data_box[8]), int(data_box[9])
-#             cv2.rectangle(img, (x0, y0), (x0+x1, y0+y1), green_bgr, 1)
-#             cv2.putText(img, data_box[11], (x0, y0-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
-
-### detecting numbers
-custom_config = r'--oem 3 --psm 6 outputbase digits'
-output = pytesseract.image_to_data(img, config = custom_config)
+### detecting words
+output = pytesseract.image_to_data(img)
 hImg, wImg, _ = img.shape
 # hImg, wImg = img.shape
 for idx, word in enumerate(output.splitlines()):
@@ -64,9 +50,23 @@ for idx, word in enumerate(output.splitlines()):
             cv2.rectangle(img, (x0, y0), (x0+x1, y0+y1), green_bgr, 1)
             cv2.putText(img, data_box[11], (x0, y0-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
 
+# ### detecting numbers
+# custom_config = r'--oem 3 --psm 6 outputbase digits'
+# output = pytesseract.image_to_data(img, config = custom_config)
+# hImg, wImg, _ = img.shape
+# # hImg, wImg = img.shape
+# for idx, word in enumerate(output.splitlines()):
+#     if idx != 0:
+#         data_box = word.split()
+#         print(data_box)
+#         if len(data_box) == 12:
+#             x0, y0, x1, y1 = int(data_box[6]), int(data_box[7]), int(data_box[8]), int(data_box[9])
+#             cv2.rectangle(img, (x0, y0), (x0+x1, y0+y1), green_bgr, 1)
+#             cv2.putText(img, data_box[11], (x0, y0-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
+
 # img_copy = np.copy(img)
 img_copy = 0
-img =  -img
+# img =  -img
 print(img_copy)
 
 

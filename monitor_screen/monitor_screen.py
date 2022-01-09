@@ -1,6 +1,7 @@
 import math
 import cv2
 import numpy as np
+import pandas as pd
 import pytesseract
 
 ##############################################
@@ -12,18 +13,9 @@ green_bgr = (0,255,00)
 yellow_bgr = (0,255,255)
 cyan_bgr = (255,255,0)
 magenta_bgr = (255,0,255)
-zoom = 0.55
-frameWidth = 1920
-frameHeight = 1080
 custom_config = r'--oem 3 --psm 6'
 ###############################################
 
-cap = cv2.VideoCapture(0)
-frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-print('opencv version {0}'.format(cv2.__version__))
-cap.set(3, frameWidth)
-cap.set(4, frameHeight)
 
 def mark_images(imgs, markings):
     for img, text in zip(imgs, markings):
@@ -72,15 +64,21 @@ def stack_images(scale, imgList, cols):
 def pre_processing(img):
     processing_imgs = []
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_blur = cv2.GaussianBlur(img, (5,5), 2)
-    img_canny = cv2.Canny(img_blur, 50, 50)
-    kernel = np.ones((10,10))
-    img_dilated = cv2.dilate(img_canny, kernel, iterations = 1)
-    img_eroded = cv2.erode(img_dilated, kernel, iterations = 1)
+    # img_bright = img_gray.copy()
+    # cv2.normalize(img_bright, img_bright, -100, 355, cv2.NORM_MINMAX)
+    img_blur = cv2.GaussianBlur(img_gray, (5,5), 4)
+    # img_canny = cv2.Canny(img_blur, 50, 50)
+    img_canny = cv2.Canny(img_blur, 100, 50)
+    kernel = np.ones((3,3))
+    img_dilated = cv2.dilate(img_canny, kernel, iterations = 2)
+    img_eroded = cv2.erode(img_dilated, kernel, iterations = 3)
     processing_imgs.extend([img, img_gray, img_blur, img_canny, img_dilated, img_eroded])
-    return processing_imgs
+    markings = ['ORIG', 'GRAY', 'BLUR', 'CANNY', 'DILATED', 'ERODED', 'CONTOUR', 'WARPED']
+
+    return processing_imgs, markings
 
 def get_contours(img, margin=0):
+    contour = False
     max_area = 0
     biggest_contour_polyline = np.array([])
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -99,6 +97,7 @@ def get_contours(img, margin=0):
                 biggest_contour_polyline = contourPolyline            
     # cv2.drawContours(img_copy, biggest_contour_polyline, -1, green_bgr, 10)
     if biggest_contour_polyline.shape == (4,1,2):
+        contour = True
         biggest_contour_polyline = reorder(biggest_contour_polyline)
         biggest_contour_polyline[0][0][0] -= margin
         biggest_contour_polyline[0][0][1] -= margin
@@ -108,7 +107,7 @@ def get_contours(img, margin=0):
         biggest_contour_polyline[2][0][1] += margin
         biggest_contour_polyline[3][0][0] += margin
         biggest_contour_polyline[3][0][1] += margin
-    return biggest_contour_polyline
+    return biggest_contour_polyline, contour
 
 def reorder(my_points: np.ndarray) -> np.ndarray:
     my_points = my_points.reshape(4,2)
@@ -191,41 +190,147 @@ def draw_contour_img(img, contour):
     img_contour = img.copy()
     cv2.drawContours(img_contour, contour, -1, green_bgr, 10)
     # which contour point is which 
-    if contour.shape == (4,1,2):
-        for i in range(contour.shape[0]):
-            cv2.putText(img_contour, str(i), (contour[i][0][0],contour[i][0][1]), cv2.FONT_HERSHEY_SIMPLEX, 2, green_bgr, 2)
+    for i in range(contour.shape[0]):
+        cv2.putText(img_contour, str(i), (contour[i][0][0],contour[i][0][1]), cv2.FONT_HERSHEY_SIMPLEX, 2, green_bgr, 2)
     return img_contour
 
+def get_boxes_and_words(df: pd.DataFrame):
+    # print(df)
+    # for idx, row in df.iterrows():
+    # We drop some redundant columns
+    df.drop(['level', 'page_num', 'block_num', 'par_num'], axis=1, inplace=True)
+    # drop rows where confident < 50
+    df.drop(df[df['conf'] < 50].index, inplace=True)
+    boxes = list(zip(df.left.tolist(), df.top.tolist(), df.width.tolist(), df.height.tolist(), df.text.tolist()))
+    # df['lines'] = df.groupby(['line_num'])['text'].transform(lambda x : ' '.join(x))
+    # df.drop_duplicates("lines",keep = 'last', inplace = True)
+    return boxes
+
+def draw_boxes(boxes, img):
+    for box in boxes:
+        cv2.rectangle(img, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), green_bgr, 1)
+        cv2.putText(img, box[4], (box[0], box[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
+
+def crop_and_read_fields(contour, processing_imgs):
+    img = processing_imgs[0]
+    img_contour = draw_contour_img(img, contour)        
+    # add to image list for final representation in stack
+    processing_imgs.append(img_contour)
+    # get warped image, sometimes contour is empty and gives error
+    # if len(contour) != 0 :
+    img_warped = get_warp(img, contour)
+    processing_imgs.append(img_warped)
+    
+    # # First attempt
+    # output = pytesseract.image_to_data(img_warped, config=custom_config, output_type='data.frame')
+    # data_blocks = get_boxes_and_words(output)
+    # draw_boxes(data_blocks, img_warped)
+
+    # Second attempt
+    # don't read all text from warped image at once but define 
+    # new fixed ROIs for each value based on warped image
+
+    # list of ROI coordinates
+    rois = {'speed':((115,95),(165,120)), 'feed':((115,120),(165,142)), 
+            'tool':((115,142), (165,165)), 'status':((415,140),(520,170)), 
+            'error messages':((415,180),(520,210))}
+    scan_results = {}
+
+    for key in rois:
+        x0 = rois[key][0][0]
+        x1 = rois[key][1][0]
+        y0 = rois[key][0][1]
+        y1 = rois[key][1][1]
+        temp_crop_img = img_warped[y0:y1, x0:x1]
+        output = pytesseract.image_to_string(temp_crop_img, config=custom_config)
+        output = output.strip()
+        result_str = f'{key} is {output}'
+        scan_results[key]=output
+        cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, 1)
+        cv2.putText(img_warped, result_str, (x0+3, y1), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, blue_bgr)
+    
+    cv2.imshow('cropped', img_warped)
+    return processing_imgs, scan_results
+
+def evaluate_scan_list(scan_results):
+    df_results = pd.DataFrame(scan_results)
+    scan_evaluated = []
+    for column in df_results:
+        value = df_results[column].value_counts()[:1].index.tolist()[0]
+        count = df_results[column].value_counts()[:1].tolist()[0]
+        column_length = df_results.shape[0]
+        certainty = count / column_length
+        result = {'topic': column, 'value': value, 'certainty': certainty}
+        scan_evaluated.append(result)
+    return scan_evaluated
+
+def detect_changes_between_evaluated_scans(scan1, scan2):
+    change_occured = False
+    for dict1, dict2 in zip(scan1, scan2):
+        if dict1['value'] != dict2['value']:
+            change_occured = True
+    return change_occured
+
 def main():
+    zoom = 0.55
+    # frameWidth = 1920
+    # frameHeight = 1080
+
+    cap = cv2.VideoCapture(0)
+    frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print('opencv version {0}'.format(cv2.__version__))
+    cap.set(3, frameWidth)
+    cap.set(4, frameHeight)
+    print (f'expose is {cap.get(cv2.CAP_PROP_EXPOSURE)}')
+    scan_results = []
+    scans_evaluated_before = None
     while True:
         succes, img = cap.read()
-
         # returns all steps in pre-processing: gray, blur, dilatated, eroded, ...
-        processing_imgs = pre_processing(img)
+        processing_imgs, markings = pre_processing(img)
         # returns biggest contour found in final preprocessed image and draws contour on img_contour
-        contour = get_contours(processing_imgs[-1], margin = 20)
-        # draw contour on original image
-        img_contour = draw_contour_img(img, contour)        
-        # add to image list for final representation in stack
-        processing_imgs.append(img_contour)
-        # get warped image, sometimes contour is empty and gives error
-        if len(contour) != 0 :
-            img_warped = get_warp(img, contour)
-            processing_imgs.append(img_warped)
-            warped = True
-            cv2.imshow('cropped', img_warped)
-            output = pytesseract.image_to_data(img_warped, config=custom_config)
-            print(output)
-        else:
-            processing_imgs.append(img)
-            warped = False
+        contour, contour_detected = get_contours(processing_imgs[-1], margin = 5) # contour is numpy ndarray shape (4,1,2)
 
-        markings = ['ORIG', 'GRAY', 'BLUR', 'CANNY', 'DILATED', 'ERODED', 'CONTOUR', 'WARPED']
+        # draw contour on original image
+        cv2.namedWindow("cropped", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("cropped", 1600, 800)
+        if contour_detected:
+            processing_imgs, scan_result = crop_and_read_fields(contour, processing_imgs )
+            # scan_result example : 
+            # {'speed': '100%', 'feed': '80%', 'tool': '73.1', 'status': 'Idle', 'error messages': 'No issues'}
+            scan_results.append(scan_result) 
+
+        else:
+            processing_imgs.append(img.copy())
+            if scan_results:
+                scan_results.pop(0)
+            if cv2.getWindowProperty('cropped', 0) >= 0:
+                cv2.destroyWindow("cropped")
+
         processing_imgs = mark_images(processing_imgs, markings)
         stacked_img = stack_images(zoom, processing_imgs, 5)
         cv2.imshow('Stack', stacked_img)
 
-        # cv2.imshow('Result', img)
+        # start evaluating scan results after 10 good scans
+        if len(scan_results) == 10:
+            # filters the topmost found values and their respective relative occurence in 10 scans
+            scans_evaluated = evaluate_scan_list(scan_results)
+            print(scans_evaluated)
+            # example scans_evaluated
+            # [{'topic': 'speed', 'value': '100%', 'certainty': 0.8}, 
+            # {'topic': 'feed', 'value': '80%', 'certainty': 0.8}, 
+            # {'topic': 'tool', 'value': '73.1', 'certainty': 0.7}, 
+            # {'topic': 'status', 'value': 'Idle', 'certainty': 0.8}, 
+            # {'topic': 'error messages', 'value': 'No issues', 'certainty': 0.7}]
+            if scans_evaluated_before != None:
+                change_detected = detect_changes_between_evaluated_scans(scans_evaluated, scans_evaluated_before)
+            scans_evaluated_before = scans_evaluated
+            scan_results.pop(0)
+
+        # if change_detected send mqtt message of scans evaluated
+
+
 
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -233,6 +338,7 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+    # output.to_csv("tesseract.csv", index = False)
 
 
 if __name__ == "__main__":
