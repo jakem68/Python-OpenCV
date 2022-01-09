@@ -1,4 +1,4 @@
-server: 172.16.10.1 # broker.hivemq.com # 172.16.10.1 # "pc00392" # can also be 127.0.0.1
+server: broker.hivemq.com # 172.16.10.1 # broker.hivemq.com # 172.16.10.1 # "pc00392" # can also be 127.0.0.1
 port: 1883 # standard mqtt port is 1883
 topic: "sirris/diep2/shop/haas/monitoring"
 username: ""

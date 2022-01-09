@@ -300,9 +300,11 @@ def update_message(payload):
 
 def run():
     # my_mqtt = Mqtt("/media/usb/MFRC522-python/rfid_to_mosquitto.yml")
-    my_mqtt = Mqtt("monitor_to_mosquitto.yml")
-    my_mqtt.start()
-    mqtt_start_time = time.time()
+    mqtt_active = True
+    if mqtt_active:
+        my_mqtt = Mqtt("/home/jan/programming/python/opencv/monitor_screen/monitor_to_mosquitto.yml")
+        my_mqtt.start()
+        mqtt_start_time = time.time()
 
     zoom = 0.55
     # frameWidth = 1920
@@ -368,13 +370,14 @@ def run():
         if change_detected:
             print (scans_evaluated)
             msg_out = update_message(scans_evaluated)
-            my_mqtt.publish(msg_out)
+            if mqtt_active:
+                my_mqtt.publish(msg_out)
 
-
-        if time.time() - mqtt_start_time > 30:
-            my_mqtt.client.disconnect()
-            mqtt_start_time = time.time()
-            my_mqtt.start()
+        if mqtt_active:
+            if time.time() - mqtt_start_time > 30:
+                my_mqtt.client.disconnect()
+                mqtt_start_time = time.time()
+                my_mqtt.start()
 
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
