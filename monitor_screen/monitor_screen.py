@@ -76,14 +76,14 @@ def pre_processing(img):
     img_canny = cv2.Canny(img_blur, 100, 50)
     kernel = np.ones((3,3))
     img_dilated = cv2.dilate(img_canny, kernel, iterations = 2)
-    img_eroded = cv2.erode(img_dilated, kernel, iterations = 3)
+    img_eroded = cv2.erode(img_dilated, kernel, iterations = 1)
     processing_imgs.extend([img, img_gray, img_blur, img_canny, img_dilated, img_eroded])
     markings = ['ORIG', 'GRAY', 'BLUR', 'CANNY', 'DILATED', 'ERODED', 'CONTOUR', 'WARPED']
 
     return processing_imgs, markings
 
 def get_contours(img, margin=0):
-    contour = False
+    contour_found = False
     max_area = 0
     biggest_contour_polyline = np.array([])
     contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -101,7 +101,7 @@ def get_contours(img, margin=0):
                 biggest_contour_polyline = contourPolyline            
     # cv2.drawContours(img_copy, biggest_contour_polyline, -1, green_bgr, 10)
     if biggest_contour_polyline.shape == (4,1,2):
-        contour = True
+        contour_found = True
         biggest_contour_polyline = reorder(biggest_contour_polyline)
         biggest_contour_polyline[0][0][0] -= margin
         biggest_contour_polyline[0][0][1] -= margin
@@ -111,7 +111,7 @@ def get_contours(img, margin=0):
         biggest_contour_polyline[2][0][1] += margin
         biggest_contour_polyline[3][0][0] += margin
         biggest_contour_polyline[3][0][1] += margin
-    return biggest_contour_polyline, contour
+    return biggest_contour_polyline, contour_found
 
 def reorder(my_points: np.ndarray) -> np.ndarray:
     my_points = my_points.reshape(4,2)
@@ -133,26 +133,27 @@ def ratio(contour):
     w2 = abs(temp_points[2][0] - temp_points[3][0])
     h1 = abs(temp_points[0][1] - temp_points[2][1])
     h2 = abs(temp_points[1][1] - temp_points[3][1])
+    # print(f'w1 {w1}')
+    # print(f'w2 {w2}')
+    # print(f'h1 {h1}')
+    # print(f'h2 {h2}')
     w_avg = (w1+w2)//2
     h_avg = (h1+h2)//2
     return w_avg/h_avg
 
 def get_warp(img, contour):
     contour = reorder(contour)
+    #### kijken of breedte of hoogte de beperkende factor is en de andere afmeting
+    # aanpassen om beeldvervorming te vermijden:
     hImg, wImg, _ = img.shape
-    img_ratio = wImg/hImg
-
-    # hImg = int(hImg * zoom)
-    # wImg = int(wImg * zoom)
-    # determine document ratio width over length
-    contour_ratio = ratio(contour)
-    if contour_ratio > img_ratio:
+    img_wh_ratio = wImg/hImg
+    contour_wh_ratio = ratio(contour)
+    if contour_wh_ratio > img_wh_ratio:
         warp_width = wImg
-        warp_height = int(warp_width / contour_ratio)
-
+        warp_height = int(warp_width / contour_wh_ratio)
     else:
         warp_height = hImg
-        warp_width = int(warp_height * contour_ratio)
+        warp_width = int(warp_height * contour_wh_ratio)
     pts1 = np.float32(contour)
     pts2 = np.float32([[0,0], [warp_width, 0], [0, warp_height], [warp_width, warp_height]])
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
@@ -210,7 +211,7 @@ def draw_contour_img(img, contour):
 #         cv2.rectangle(img, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), green_bgr, 1)
 #         cv2.putText(img, box[4], (box[0], box[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
 
-def crop_and_read_fields(contour, processing_imgs):
+def crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio):
     img = processing_imgs[0]
     img_contour = draw_contour_img(img, contour)        
     # add to image list for final representation in stack
@@ -219,7 +220,7 @@ def crop_and_read_fields(contour, processing_imgs):
     # if len(contour) != 0 :
     img_warped = get_warp(img, contour)
     processing_imgs.append(img_warped)
-    
+
     # # First attempt
     # output = pytesseract.image_to_data(img_warped, config=custom_config, output_type='data.frame')
     # data_blocks = get_boxes_and_words(output)
@@ -230,9 +231,23 @@ def crop_and_read_fields(contour, processing_imgs):
     # new fixed ROIs for each value based on warped image
 
     # list of ROI coordinates, manually taken of the screen from img_warped
-    rois = {'speed':((115,95),(175,118)), 'feed':((115,119),(175,141)), 
-            'tool':((115,142), (175,165)), 'status':((413,140),(550,170)), 
-            'error messages':((413,180),(550,210))}
+    rois = {'speed':([115,95], [175,118]), 'feed':([115,119], [175,141]), 
+            'tool':([115,142], [175,165]), 'status':([413,140], [550,170]), 
+            'error messages':([413,180], [550,210])}
+
+    # afhankelijk van welke de beperkende factor was om te resizen in get_warped()
+    # geldt dit als de respectievelijke pixelratio in de twee richtingen
+    if img.shape[0] == img_warped.shape[0]:
+        fw_ratio = fh_ratio
+    else:
+        fh_ratio = fw_ratio
+
+    for k, v in rois.items():
+        # print(f'key is {k}, value is {v}')
+        for coord in v:
+            coord[0] = round(coord[0] * fw_ratio)
+            coord[1] = round(coord[1] * fh_ratio)
+
     scan_results = {}
     for key in rois:
         x0 = rois[key][0][0]
@@ -240,21 +255,34 @@ def crop_and_read_fields(contour, processing_imgs):
         y0 = rois[key][0][1]
         y1 = rois[key][1][1]
         imgt = img_warped[y0:y1, x0:x1]
-        #### prepare img for tesseract
-        # make gray
-        imgt = cv2.cvtColor(imgt, cv2.COLOR_BGR2GRAY)
-        # resize
-        imgt = cv2.resize(imgt, (0,0), fx=8, fy=8, interpolation=cv2.INTER_CUBIC)
-        # sharpen
-        kernel = np.array([[0, -1, 0],
-                           [-1, 5,-1],
-                           [0, -1, 0]])
-        imgt = cv2.filter2D(src=imgt, ddepth=-1, kernel=kernel)
-        # make black and white
-        (thresh, imgt) = cv2.threshold(imgt, 127, 255, cv2.THRESH_TRIANGLE)
-        # dilate
-        kernel = np.ones((4, 4), np.uint8)
-        imgt = cv2.dilate(imgt, kernel, iterations=1)
+
+        #### prepare img for tesseract low res
+        # # make gray
+        # imgt = cv2.cvtColor(imgt, cv2.COLOR_BGR2GRAY)
+        # # resize
+        # imgt = cv2.resize(imgt, (0,0), fx=8, fy=8, interpolation=cv2.INTER_CUBIC)
+        # # sharpen
+        # kernel = np.array([[0, -1, 0],
+        #                    [-1, 5,-1],
+        #                    [0, -1, 0]])
+        # imgt = cv2.filter2D(src=imgt, ddepth=-1, kernel=kernel)
+        # # make black and white
+        # (thresh, imgt) = cv2.threshold(imgt, 127, 255, cv2.THRESH_TRIANGLE)
+        # # dilate
+        # kernel = np.ones((4, 4), np.uint8)
+        # imgt = cv2.dilate(imgt, kernel, iterations=1)
+
+        #### prepare img for tesseract high res
+        img_gray = cv2.cvtColor(imgt, cv2.COLOR_BGR2GRAY)
+        img_blur = cv2.GaussianBlur(img_gray, (5,5), 2)
+        # img_canny = cv2.Canny(img_blur, 50, 50)
+        img_canny = cv2.Canny(img_blur, 100, 100)
+        kernel = np.ones((3,3))
+        img_dilated = cv2.dilate(img_canny, kernel, iterations = 2)
+        img_eroded = cv2.erode(img_dilated, kernel, iterations = 1)
+        imgt = img_eroded.copy()
+        imgt = cv2.bitwise_not(imgt)
+
         # for testing
         # cv2.imshow('temp cropped', imgt)
         # cv2.waitKey(0)
@@ -262,9 +290,9 @@ def crop_and_read_fields(contour, processing_imgs):
         output = pytesseract.image_to_string(imgt, config=custom_config)
         output = output.lower().strip()
         scan_results[key]=output
-        cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, 1)
+        cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, int(1*fw_ratio))
         result_str = f'{key} is {output}'
-        cv2.putText(img_warped, result_str, (x0+3, y1-2), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5, blue_bgr)    
+        cv2.putText(img_warped, result_str, (x0+3, y1-5), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5*fw_ratio, blue_bgr)    
     cv2.imshow('cropped', img_warped)
     return processing_imgs, scan_results
 
@@ -300,19 +328,27 @@ def update_message(payload):
 
 def run():
     # my_mqtt = Mqtt("/media/usb/MFRC522-python/rfid_to_mosquitto.yml")
-    mqtt_active = True
+    mqtt_active = False
     if mqtt_active:
         my_mqtt = Mqtt("/home/jan/programming/python/opencv/monitor_screen/monitor_to_mosquitto.yml")
         my_mqtt.start()
         mqtt_start_time = time.time()
 
-    zoom = 0.55
-    # frameWidth = 1920
-    # frameHeight = 1080
-
     cap = cv2.VideoCapture(0)
-    frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frameWidth_default = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frameHeight_default = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    zoom_default = 0.55 
+    # standard:
+    frameWidth = frameWidth_default     # 640
+    frameHeight  = frameHeight_default  # 480
+    frameWidth = 1920
+    frameHeight = 1080
+    fh_ratio = frameHeight / frameHeight_default
+    fw_ratio = frameWidth / frameWidth_default
+
+    zoom = zoom_default / fw_ratio
+
+    print(f'framedimensions {frameWidth}, {frameHeight}')
     print('opencv version {0}'.format(cv2.__version__))
     cap.set(3, frameWidth)
     cap.set(4, frameHeight)
@@ -324,13 +360,13 @@ def run():
         # returns all steps in pre-processing: gray, blur, dilatated, eroded, ...
         processing_imgs, markings = pre_processing(img)
         # returns biggest contour found in final preprocessed image and draws contour on img_contour
-        contour, contour_detected = get_contours(processing_imgs[-1], margin = 5) # contour is numpy ndarray shape (4,1,2)
+        contour, contour_found = get_contours(processing_imgs[-1], margin = 5) # contour is numpy ndarray shape (4,1,2)
 
         # draw contour on original image
         cv2.namedWindow("cropped", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("cropped", 1600, 800)
-        if contour_detected:
-            processing_imgs, scan_result = crop_and_read_fields(contour, processing_imgs )
+        if contour_found:
+            processing_imgs, scan_result = crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio)
             # scan_result example : 
             # {'speed': '100%', 'feed': '80%', 'tool': '73.1', 'status': 'Idle', 'error messages': 'No issues'}
             scan_results.append(scan_result) 
