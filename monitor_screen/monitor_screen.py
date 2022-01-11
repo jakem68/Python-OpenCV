@@ -7,6 +7,7 @@ import math, cv2, time, pytesseract, json
 import numpy as np
 import pandas as pd
 from my_mqtt_module import Mqtt
+from copy import deepcopy
 
 
 ##############################################
@@ -133,10 +134,6 @@ def ratio(contour):
     w2 = abs(temp_points[2][0] - temp_points[3][0])
     h1 = abs(temp_points[0][1] - temp_points[2][1])
     h2 = abs(temp_points[1][1] - temp_points[3][1])
-    # print(f'w1 {w1}')
-    # print(f'w2 {w2}')
-    # print(f'h1 {h1}')
-    # print(f'h2 {h2}')
     w_avg = (w1+w2)//2
     h_avg = (h1+h2)//2
     return w_avg/h_avg
@@ -211,50 +208,15 @@ def draw_contour_img(img, contour):
 #         cv2.rectangle(img, (box[0], box[1]), (box[0]+box[2], box[1]+box[3]), green_bgr, 1)
 #         cv2.putText(img, box[4], (box[0], box[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, blue_bgr)
 
-def crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio):
-    img = processing_imgs[0]
-    img_contour = draw_contour_img(img, contour)        
-    # add to image list for final representation in stack
-    processing_imgs.append(img_contour)
-    # get warped image, sometimes contour is empty and gives error
-    # if len(contour) != 0 :
-    img_warped = get_warp(img, contour)
-    processing_imgs.append(img_warped)
-
-    # # First attempt
-    # output = pytesseract.image_to_data(img_warped, config=custom_config, output_type='data.frame')
-    # data_blocks = get_boxes_and_words(output)
-    # draw_boxes(data_blocks, img_warped)
-
-    # Second attempt
-    # don't read all text from warped image at once but define 
-    # new fixed ROIs for each value based on warped image
-
-    # list of ROI coordinates, manually taken of the screen from img_warped
-    rois = {'speed':([115,95], [175,118]), 'feed':([115,119], [175,141]), 
-            'tool':([115,142], [175,165]), 'status':([413,140], [550,170]), 
-            'error messages':([413,180], [550,210])}
-
-    # afhankelijk van welke de beperkende factor was om te resizen in get_warped()
-    # geldt dit als de respectievelijke pixelratio in de twee richtingen
-    if img.shape[0] == img_warped.shape[0]:
-        fw_ratio = fh_ratio
-    else:
-        fh_ratio = fw_ratio
-
-    for k, v in rois.items():
-        # print(f'key is {k}, value is {v}')
-        for coord in v:
-            coord[0] = round(coord[0] * fw_ratio)
-            coord[1] = round(coord[1] * fh_ratio)
+def crop_and_read_fields(img, rois_mod):
 
     scan_results = {}
-    for key in rois:
-        x0 = rois[key][0][0]
-        x1 = rois[key][1][0]
-        y0 = rois[key][0][1]
-        y1 = rois[key][1][1]
-        imgt = img_warped[y0:y1, x0:x1]
+    for key in rois_mod:
+        x0 = rois_mod[key][0][0]
+        x1 = rois_mod[key][1][0]
+        y0 = rois_mod[key][0][1]
+        y1 = rois_mod[key][1][1]
+        imgt = img[y0:y1, x0:x1]
 
         #### prepare img for tesseract low res
         # # make gray
@@ -283,18 +245,96 @@ def crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio):
         imgt = img_eroded.copy()
         imgt = cv2.bitwise_not(imgt)
 
-        # for testing
-        # cv2.imshow('temp cropped', imgt)
-        # cv2.waitKey(0)
         ## handle output from tessereact
         output = pytesseract.image_to_string(imgt, config=custom_config)
         output = output.lower().strip()
         scan_results[key]=output
-        cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, int(1*fw_ratio))
-        result_str = f'{key} is {output}'
-        cv2.putText(img_warped, result_str, (x0+3, y1-5), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5*fw_ratio, blue_bgr)    
-    cv2.imshow('cropped', img_warped)
-    return processing_imgs, scan_results
+    return scan_results
+
+# def crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio):
+#     img = processing_imgs[0]
+#     img_contour = draw_contour_img(img, contour)        
+#     # add to image list for final representation in stack
+#     processing_imgs.append(img_contour)
+#     # get warped image, sometimes contour is empty and gives error
+#     # if len(contour) != 0 :
+#     img_warped = get_warp(img, contour)
+#     processing_imgs.append(img_warped)
+
+#     # # First attempt
+#     # output = pytesseract.image_to_data(img_warped, config=custom_config, output_type='data.frame')
+#     # data_blocks = get_boxes_and_words(output)
+#     # draw_boxes(data_blocks, img_warped)
+
+#     # Second attempt
+#     # don't read all text from warped image at once but define 
+#     # new fixed ROIs for each value based on warped image
+
+#     # list of ROI coordinates, manually taken of the screen from img_warped
+#     rois = {'speed':([115,95], [175,118]), 'feed':([115,119], [175,141]), 
+#             'tool':([115,142], [175,165]), 'status':([413,140], [550,170]), 
+#             'error msgs':([413,180], [550,210])}
+
+#     # afhankelijk van welke de beperkende factor was om te resizen in get_warped()
+#     # geldt dit als de respectievelijke pixelratio in de twee richtingen
+#     if img.shape[0] == img_warped.shape[0]:
+#         fw_ratio = fh_ratio
+#     else:
+#         fh_ratio = fw_ratio
+
+#     for k, v in rois.items():
+#         # print(f'key is {k}, value is {v}')
+#         for coord in v:
+#             coord[0] = round(coord[0] * fw_ratio)
+#             coord[1] = round(coord[1] * fh_ratio)
+
+#     scan_results = {}
+#     for key in rois:
+#         x0 = rois[key][0][0]
+#         x1 = rois[key][1][0]
+#         y0 = rois[key][0][1]
+#         y1 = rois[key][1][1]
+#         imgt = img_warped[y0:y1, x0:x1]
+
+#         #### prepare img for tesseract low res
+#         # # make gray
+#         # imgt = cv2.cvtColor(imgt, cv2.COLOR_BGR2GRAY)
+#         # # resize
+#         # imgt = cv2.resize(imgt, (0,0), fx=8, fy=8, interpolation=cv2.INTER_CUBIC)
+#         # # sharpen
+#         # kernel = np.array([[0, -1, 0],
+#         #                    [-1, 5,-1],
+#         #                    [0, -1, 0]])
+#         # imgt = cv2.filter2D(src=imgt, ddepth=-1, kernel=kernel)
+#         # # make black and white
+#         # (thresh, imgt) = cv2.threshold(imgt, 127, 255, cv2.THRESH_TRIANGLE)
+#         # # dilate
+#         # kernel = np.ones((4, 4), np.uint8)
+#         # imgt = cv2.dilate(imgt, kernel, iterations=1)
+
+#         #### prepare img for tesseract high res
+#         img_gray = cv2.cvtColor(imgt, cv2.COLOR_BGR2GRAY)
+#         img_blur = cv2.GaussianBlur(img_gray, (5,5), 2)
+#         # img_canny = cv2.Canny(img_blur, 50, 50)
+#         img_canny = cv2.Canny(img_blur, 100, 100)
+#         kernel = np.ones((3,3))
+#         img_dilated = cv2.dilate(img_canny, kernel, iterations = 2)
+#         img_eroded = cv2.erode(img_dilated, kernel, iterations = 1)
+#         imgt = img_eroded.copy()
+#         imgt = cv2.bitwise_not(imgt)
+
+#         # for testing
+#         # cv2.imshow('temp cropped', imgt)
+#         # cv2.waitKey(0)
+#         ## handle output from tessereact
+#         output = pytesseract.image_to_string(imgt, config=custom_config)
+#         output = output.lower().strip()
+#         scan_results[key]=output
+#         cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, int(1*fw_ratio))
+#         result_str = f'{key} is {output}'
+#         cv2.putText(img_warped, result_str, (x0+3, y1-5), cv2.FONT_HERSHEY_COMPLEX_SMALL, 0.5*fw_ratio, blue_bgr)    
+#     cv2.imshow('cropped', img_warped)
+#     return processing_imgs, scan_results
 
 def evaluate_scan_list(scan_results):
     df_results = pd.DataFrame(scan_results)
@@ -326,6 +366,15 @@ def update_message(payload):
     msg_out = json.dumps(message)
     return msg_out
 
+def show_img_test(title, img):
+        cv2.namedWindow(title, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(title, 800, 400)
+        cv2.imshow(title, img)
+        cv2.waitKey(0)
+        cv2.destroyWindow(title)
+
+
+
 def run():
     # my_mqtt = Mqtt("/media/usb/MFRC522-python/rfid_to_mosquitto.yml")
     mqtt_active = False
@@ -348,6 +397,11 @@ def run():
 
     zoom = zoom_default / fw_ratio
 
+    # list of ROI coordinates, manually taken of the screen from img_warped
+    rois = {'speed':([115,95], [175,118]), 'feed':([115,119], [175,141]), 
+            'tool':([115,142], [175,165]), 'status':([413,140], [550,170]), 
+            'error msgs':([413,180], [550,210])}
+
     print(f'framedimensions {frameWidth}, {frameHeight}')
     print('opencv version {0}'.format(cv2.__version__))
     cap.set(3, frameWidth)
@@ -355,6 +409,7 @@ def run():
     print (f'expose is {cap.get(cv2.CAP_PROP_EXPOSURE)}')
     scan_results = []
     scans_evaluated_before = None
+
     while True:
         succes, img = cap.read()
         # returns all steps in pre-processing: gray, blur, dilatated, eroded, ...
@@ -363,25 +418,40 @@ def run():
         contour, contour_found = get_contours(processing_imgs[-1], margin = 5) # contour is numpy ndarray shape (4,1,2)
 
         # draw contour on original image
-        cv2.namedWindow("cropped", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("cropped", 1600, 800)
         if contour_found:
-            processing_imgs, scan_result = crop_and_read_fields(contour, processing_imgs, fw_ratio, fh_ratio)
+            img_contour = draw_contour_img(img, contour)
+       
+            # add to image list for final representation in stack
+            processing_imgs.append(img_contour)
+            # get warped image, sometimes contour is empty and gives error
+            # if len(contour) != 0 :
+            img_warped = get_warp(img, contour)
+            # afhankelijk van welke de beperkende factor was om te resizen in get_warped()
+            # geldt dit als de respectievelijke pixelratio in de twee richtingen
+            if img.shape[0] == img_warped.shape[0]:
+                warped_ratio = fh_ratio
+            else:
+                warped_ratio = fw_ratio
+
+            # modify rois based on warped image            
+            rois_mod = deepcopy(rois)
+            for k, v in rois_mod.items():
+                for coord in v:
+                    coord[0] = round(coord[0] * warped_ratio)
+                    coord[1] = round(coord[1] * warped_ratio)
+
+            scan_result = crop_and_read_fields(img_warped, rois_mod)
             # scan_result example : 
-            # {'speed': '100%', 'feed': '80%', 'tool': '73.1', 'status': 'Idle', 'error messages': 'No issues'}
+            # {'speed': '100%', 'feed': '80%', 'tool': '73.1', 'status': 'Idle', 'error msgs': 'No issues'}
             scan_results.append(scan_result) 
 
         else:
             processing_imgs.append(img.copy())
+            processing_imgs.append(img.copy())
             if scan_results:
                 # scan_results.pop(0)
                 scan_results = []
-            if cv2.getWindowProperty('cropped', 0) >= 0:
-                cv2.destroyWindow("cropped")
 
-        processing_imgs = mark_images(processing_imgs, markings)
-        stacked_img = stack_images(zoom, processing_imgs, 5)
-        cv2.imshow('Stack', stacked_img)
 
         # start evaluating scan results after 10 good scans
         change_detected = False
@@ -393,7 +463,7 @@ def run():
             # {'topic': 'feed', 'value': '80%', 'certainty': 0.8}, 
             # {'topic': 'tool', 'value': '73.1', 'certainty': 0.7}, 
             # {'topic': 'status', 'value': 'Idle', 'certainty': 0.8}, 
-            # {'topic': 'error messages', 'value': 'No issues', 'certainty': 0.7}]
+            # {'topic': 'error msgs', 'value': 'No issues', 'certainty': 0.7}]
             if scans_evaluated_before != None:
                 change_detected = detect_changes_between_evaluated_scans(scans_evaluated, scans_evaluated_before)
             else:
@@ -402,13 +472,34 @@ def run():
             # scan_results.pop(0)
             scan_results = []
 
+            cnt = 0
+            for key in rois_mod:
+                x0 = rois_mod[key][0][0]
+                x1 = rois_mod[key][1][0]
+                y0 = rois_mod[key][0][1]
+                y1 = rois_mod[key][1][1]
+
+                cv2.rectangle(img_warped, (x0, y0), (x1, y1), green_bgr, int(1*warped_ratio))
+                result_str = f'{key}: {scans_evaluated_before[cnt]["value"]}, cert {scans_evaluated_before[cnt]["certainty"]}'
+                cv2.putText(img_warped, result_str, (x0-20, y1-5), cv2.FONT_HERSHEY_SIMPLEX, \
+                    0.5*warped_ratio, blue_bgr, thickness=math.ceil(0.5*warped_ratio))
+                cnt += 1
+            processing_imgs.append(img_warped)
+            cv2.namedWindow('cropped', cv2.WINDOW_NORMAL)
+            cv2.resizeWindow('cropped', 1600, 800)
+            cv2.imshow('cropped', img_warped)
+
+        processing_imgs = mark_images(processing_imgs, markings)
+        stacked_img = stack_images(zoom, processing_imgs, 5)
+        cv2.imshow('Stack', stacked_img)
+
+
         # if change_detected send mqtt message of evaluated scans
         if change_detected:
             print (scans_evaluated)
             msg_out = update_message(scans_evaluated)
             if mqtt_active:
                 my_mqtt.publish(msg_out)
-
         if mqtt_active:
             if time.time() - mqtt_start_time > 30:
                 my_mqtt.client.disconnect()
